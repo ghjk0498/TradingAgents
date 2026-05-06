@@ -1,3 +1,4 @@
+import os
 from typing import Any, Optional
 
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -36,9 +37,21 @@ class GoogleClient(BaseLLMClient):
                 llm_kwargs[key] = self.kwargs[key]
 
         # Unified api_key maps to provider-specific google_api_key
-        google_api_key = self.kwargs.get("api_key") or self.kwargs.get("google_api_key")
+        google_api_key = (
+            self.kwargs.get("api_key") or
+            self.kwargs.get("google_api_key") or
+            os.getenv("GOOGLE_API_KEY") or
+            os.getenv("GEMINI_API_KEY")
+        )
+
         if google_api_key:
             llm_kwargs["google_api_key"] = google_api_key
+        else:
+            raise ValueError(
+                "Google API key not found. Please set GOOGLE_API_KEY in your .env "
+                "file or environment variables, or provide it via the 'api_key' "
+                "parameter when creating the client."
+            )
 
         # Map thinking_level to appropriate API param based on model
         # Gemini 3 Pro: low, high
