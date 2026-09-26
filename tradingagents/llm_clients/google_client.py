@@ -1,10 +1,24 @@
 import os
-from typing import Any, Optional
+import re
+from typing import Any
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from .base_client import BaseLLMClient, normalize_content
 from .validators import validate_model
+
+_GEMINI_VERSION = re.compile(r"^gemini-(\d+)\.(\d+)")
+
+
+def _accepts_minimal_thinking(model: str) -> bool:
+    """Whether ``thinking_level="minimal"`` is accepted: numbered Flash models
+    before 3.8. Pro, 3.8+ and version-less aliases (which move between
+    generations) are treated as rejecting it."""
+    model_lc = model.lower()
+    match = _GEMINI_VERSION.match(model_lc)
+    return bool(match) and "pro" not in model_lc and (
+        (int(match.group(1)), int(match.group(2))) < (3, 8)
+    )
 
 
 class NormalizedChatGoogleGenerativeAI(ChatGoogleGenerativeAI):
@@ -21,7 +35,7 @@ class NormalizedChatGoogleGenerativeAI(ChatGoogleGenerativeAI):
 class GoogleClient(BaseLLMClient):
     """Client for Google Gemini models."""
 
-    def __init__(self, model: str, base_url: Optional[str] = None, **kwargs):
+    def __init__(self, model: str, base_url: str | None = None, **kwargs):
         super().__init__(model, base_url, **kwargs)
 
     def get_llm(self) -> Any:
@@ -32,7 +46,8 @@ class GoogleClient(BaseLLMClient):
         if self.base_url:
             llm_kwargs["base_url"] = self.base_url
 
-        for key in ("timeout", "max_retries", "callbacks", "http_client", "http_async_client"):
+        for key in ("timeout", "max_retries", "temperature", "max_output_tokens",
+                    "callbacks", "http_client", "http_async_client"):
             if key in self.kwargs:
                 llm_kwargs[key] = self.kwargs[key]
 
@@ -53,21 +68,15 @@ class GoogleClient(BaseLLMClient):
                 "parameter when creating the client."
             )
 
-        # Map thinking_level to appropriate API param based on model
-        # Gemini 3 Pro: low, high
-        # Gemini 3 Flash: minimal, low, medium, high
-        # Gemini 2.5: thinking_budget (0=disable, -1=dynamic)
+        # Gemini 3.x takes the string ``thinking_level`` (the integer
+        # ``thinking_budget`` was for the now-retired 2.5 line). Pro, Gemini
+        # 3.8+ and the -latest aliases reject "minimal" with a 400; "low" is
+        # accepted everywhere, so it is the fallback.
         thinking_level = self.kwargs.get("thinking_level")
         if thinking_level:
-            model_lower = self.model.lower()
-            if "gemini-3" in model_lower:
-                # Gemini 3 Pro doesn't support "minimal", use "low" instead
-                if "pro" in model_lower and thinking_level == "minimal":
-                    thinking_level = "low"
-                llm_kwargs["thinking_level"] = thinking_level
-            else:
-                # Gemini 2.5: map to thinking_budget
-                llm_kwargs["thinking_budget"] = -1 if thinking_level == "high" else 0
+            if thinking_level == "minimal" and not _accepts_minimal_thinking(self.model):
+                thinking_level = "low"
+            llm_kwargs["thinking_level"] = thinking_level
 
         return NormalizedChatGoogleGenerativeAI(**llm_kwargs)
 

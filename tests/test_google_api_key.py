@@ -1,6 +1,6 @@
-import unittest
 import os
-from unittest.mock import patch, MagicMock
+import unittest
+from unittest.mock import patch
 
 import pytest
 
@@ -24,7 +24,7 @@ class TestGoogleApiKeyStandardization(unittest.TestCase):
                 mock_chat.reset_mock()
                 # Ensure it doesn't fail due to missing env key if not provided in kwargs
                 with patch.dict(os.environ, {"GOOGLE_API_KEY": "dummy"}):
-                    client = GoogleClient("gemini-2.5-flash", **kwargs)
+                    client = GoogleClient("gemini-3.5-flash", **kwargs)
                     client.get_llm()
                     call_kwargs = mock_chat.call_args[1]
                     self.assertEqual(call_kwargs.get("google_api_key"), expected_key)
@@ -33,7 +33,7 @@ class TestGoogleApiKeyStandardization(unittest.TestCase):
     def test_missing_api_key_raises_error(self, mock_chat):
         """Verify that ValueError is raised when no API key is found."""
         with patch.dict(os.environ, {}, clear=True):
-            client = GoogleClient("gemini-2.5-flash")
+            client = GoogleClient("gemini-3.5-flash")
             with self.assertRaisesRegex(ValueError, "Google API key not found"):
                 client.get_llm()
 
@@ -41,7 +41,7 @@ class TestGoogleApiKeyStandardization(unittest.TestCase):
     def test_api_key_from_env(self, mock_chat):
         """Verify that API key is picked up from environment."""
         with patch.dict(os.environ, {"GOOGLE_API_KEY": "env-key"}, clear=True):
-            client = GoogleClient("gemini-2.5-flash")
+            client = GoogleClient("gemini-3.5-flash")
             client.get_llm()
             call_kwargs = mock_chat.call_args[1]
             self.assertEqual(call_kwargs.get("google_api_key"), "env-key")
